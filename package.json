@@ -1,0 +1,159 @@
+{
+  "name": "@classytic/media-transform",
+  "version": "0.1.0",
+  "description": "Client-side media processing — compress, resize, and re-encode images/video in the browser before upload (WhatsApp/Facebook-style), so a Node backend can skip sharp on the hot path. Runtime-agnostic pure core + a browser adapter; a React Native adapter satisfies the same contract.",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    },
+    "./capabilities": {
+      "types": "./dist/capabilities.d.ts",
+      "default": "./dist/capabilities.js"
+    },
+    "./algorithms/sizing": {
+      "types": "./dist/algorithms/sizing.d.ts",
+      "default": "./dist/algorithms/sizing.js"
+    },
+    "./algorithms/format": {
+      "types": "./dist/algorithms/format.d.ts",
+      "default": "./dist/algorithms/format.js"
+    },
+    "./algorithms/sanitize": {
+      "types": "./dist/algorithms/sanitize.d.ts",
+      "default": "./dist/algorithms/sanitize.js"
+    },
+    "./algorithms/presets": {
+      "types": "./dist/algorithms/presets.d.ts",
+      "default": "./dist/algorithms/presets.js"
+    },
+    "./algorithms/hash": {
+      "types": "./dist/algorithms/hash.d.ts",
+      "default": "./dist/algorithms/hash.js"
+    },
+    "./algorithms/color": {
+      "types": "./dist/algorithms/color.d.ts",
+      "default": "./dist/algorithms/color.js"
+    },
+    "./image/uploadHints": {
+      "types": "./dist/image/uploadHints.d.ts",
+      "default": "./dist/image/uploadHints.js"
+    },
+    "./image/compressImage": {
+      "types": "./dist/image/compressImage.d.ts",
+      "default": "./dist/image/compressImage.js"
+    },
+    "./image/ImageIOAdapter": {
+      "types": "./dist/image/ImageIOAdapter.d.ts",
+      "default": "./dist/image/ImageIOAdapter.js"
+    },
+    "./image/BrowserImageAdapter": {
+      "types": "./dist/image/BrowserImageAdapter.d.ts",
+      "default": "./dist/image/BrowserImageAdapter.js"
+    },
+    "./image/llmPayload": {
+      "types": "./dist/image/llmPayload.d.ts",
+      "default": "./dist/image/llmPayload.js"
+    },
+    "./image/workerProtocol": {
+      "types": "./dist/image/workerProtocol.d.ts",
+      "default": "./dist/image/workerProtocol.js"
+    },
+    "./image/worker": {
+      "types": "./dist/image/worker.d.ts",
+      "default": "./dist/image/worker.js"
+    },
+    "./react/useImageCompress": {
+      "types": "./dist/react/useImageCompress.d.ts",
+      "default": "./dist/react/useImageCompress.js"
+    },
+    "./react/useImageUpload": {
+      "types": "./dist/react/useImageUpload.d.ts",
+      "default": "./dist/react/useImageUpload.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "image-compression",
+    "client-side",
+    "browser",
+    "resize",
+    "webcodecs",
+    "offscreencanvas",
+    "avif",
+    "webp",
+    "upload",
+    "media",
+    "thumbhash",
+    "presigned-upload",
+    "react-native",
+    "typescript"
+  ],
+  "author": "Classytic <classytic.dev@gmail.com> (https://github.com/classytic)",
+  "contributors": [
+    "Sadman Chowdhury (https://github.com/siam923)"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/classytic/media-transform.git"
+  },
+  "homepage": "https://github.com/classytic/media-transform#readme",
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "thumbhash": ">=0.1.1"
+  },
+  "peerDependenciesMeta": {
+    "react": { "optional": true },
+    "thumbhash": { "optional": true }
+  },
+  "scripts": {
+    "build": "tsdown && tsc --emitDeclarationOnly --outDir dist",
+    "dev": "tsdown --watch",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src/",
+    "lint:fix": "biome check src/ --write",
+    "check": "biome ci src/ --diagnostic-level=error",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "push": "classytic-push",
+    "prepublishOnly": "npm run check && npm run typecheck && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.10",
+    "@testing-library/react": "^16.1.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^4.1.4",
+    "happy-dom": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "thumbhash": "^0.1.1",
+    "tsdown": "^0.21.8",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.4"
+  }
+}
