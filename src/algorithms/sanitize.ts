@@ -165,3 +165,16 @@ function concat(parts: readonly Uint8Array[]): Uint8Array {
   }
   return out;
 }
+
+/**
+ * Can {@link stripImageMetadata} actually remove metadata from this format?
+ *
+ * Exported so the PASSTHROUGH path can ask before promising. The sanitizer
+ * returns anything else unchanged, and it does so silently — so a HEIC or TIFF
+ * passed through under `stripMetadata: true` kept its EXIF (and its GPS) while
+ * the option said otherwise.
+ */
+export function canStripImageMetadata(mimeType: string): boolean {
+  const mime = mimeType.toLowerCase().split(';')[0]?.trim() ?? '';
+  return mime === 'image/jpeg' || mime === 'image/jpg' || mime === 'image/png' || mime === 'image/webp';
+}

@@ -28,17 +28,37 @@ function makeFakeAdapter(opts: { width: number; height: number; fail?: boolean }
  * the fake adapter and dispatches the response to registered listeners —
  * i.e. the REAL worker entry's behavior, minus the thread.
  */
-function makeLoopbackWorker(adapter: ImageIOAdapter): WorkerLike {
-  const listeners = new Set<(e: { data: unknown }) => void>();
+function makeLoopbackWorker(adapter: ImageIOAdapter): WorkerLike & {
+  emitError(message?: string): void;
+  emitMessageError(): void;
+} {
+  // Keyed BY TYPE, like a real EventTarget. A single shared set would deliver
+  // every message to the `error` listener too, which is a property of the fake
+  // and not of the code under test.
+  const listeners = new Map<string, Set<(e: unknown) => void>>();
+  const of = (type: string) => {
+    let set = listeners.get(type);
+    if (!set) {
+      set = new Set();
+      listeners.set(type, set);
+    }
+    return set;
+  };
   return {
     postMessage(message: unknown) {
       if (!isCompressWorkerRequest(message)) return;
       void handleCompressRequest(adapter, message).then((response) => {
-        for (const l of listeners) l({ data: response });
+        for (const l of of('message')) l({ data: response });
       });
     },
-    addEventListener: (_t, l) => listeners.add(l),
-    removeEventListener: (_t, l) => listeners.delete(l),
+    addEventListener: (t, l) => void of(t).add(l),
+    removeEventListener: (t, l) => void of(t).delete(l),
+    emitError: (message = 'boom') => {
+      for (const l of of('error')) l({ message });
+    },
+    emitMessageError: () => {
+      for (const l of of('messageerror')) l({});
+    },
   };
 }
 
@@ -126,5 +146,46 @@ describe('createWorkerMediaTransform', () => {
     mt.dispose();
     await expect(pending).rejects.toThrow('disposed');
     expect(listeners.size).toBe(0);
+  });
+});
+
+describe('worker-level failures', () => {
+  /**
+   * A worker that fails to LOAD (bad bundle URL, CSP refusal) emits `error` and
+   * never answers. Listening only for `message` left every pending promise
+   * pending forever — the upload row just span. No rejection, no timeout: the
+   * one outcome indistinguishable from "still working".
+   */
+  it('rejects everything in flight on a worker `error`', async () => {
+    const worker = makeLoopbackWorker(makeFakeAdapter({ width: 4000, height: 3000 }));
+    const mt = createWorkerMediaTransform(worker);
+
+    const never = new Promise<never>(() => {});
+    const pending = mt.compressImage(file(), { maxEdge: 1600 });
+    // Fail before the loopback resolves.
+    worker.emitError('failed to load');
+
+    await expect(Promise.race([pending, never])).rejects.toThrow(/worker error: failed to load/);
+  });
+
+  it('rejects on `messageerror` (a reply that could not be deserialised)', async () => {
+    const worker = makeLoopbackWorker(makeFakeAdapter({ width: 4000, height: 3000 }));
+    const mt = createWorkerMediaTransform(worker);
+
+    const pending = mt.compressImage(file(), { maxEdge: 1600 });
+    worker.emitMessageError();
+
+    await expect(pending).rejects.toThrow(/could not be deserialised/);
+  });
+
+  it('dispose() detaches ALL three listeners', () => {
+    const worker = makeLoopbackWorker(makeFakeAdapter({ width: 100, height: 100 }));
+    const mt = createWorkerMediaTransform(worker);
+    mt.dispose();
+
+    // Nothing is pending and no listener remains, so this is inert rather than
+    // reaching a rejected-but-unobserved promise.
+    expect(() => worker.emitError()).not.toThrow();
+    expect(() => worker.emitMessageError()).not.toThrow();
   });
 });

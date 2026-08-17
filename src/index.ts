@@ -18,6 +18,11 @@
 import { createBrowserImageAdapter } from './image/BrowserImageAdapter.js';
 import { compressImage } from './image/compressImage.js';
 import type { CompressImageOptions, CompressImageResult, MediaTransform } from './types.js';
+import {
+  compressImageSet,
+  type CompressImageSetOptions,
+  type CompressImageSetResult,
+} from './image/compressImageSet.js';
 
 export type {
   MediaTransform,
@@ -45,6 +50,9 @@ export async function createBrowserMediaTransform(): Promise<MediaTransform> {
   return {
     compressImage(source: Blob, options?: CompressImageOptions): Promise<CompressImageResult> {
       return compressImage(adapter, source, options);
+    },
+    compressImageSet(source: Blob, options?: CompressImageSetOptions): Promise<CompressImageSetResult> {
+      return compressImageSet(adapter, source, options);
     },
   };
 }

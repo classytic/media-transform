@@ -27,6 +27,36 @@ export interface UploadHints {
   dominantColor?: string | undefined;
 }
 
+const FORMAT_EXT: Record<string, string> = {
+  jpeg: 'jpg',
+  webp: 'webp',
+  avif: 'avif',
+  png: 'png',
+  gif: 'gif',
+};
+
+/**
+ * The name to STORE the encoded bytes under — original stem, extension matching
+ * what was actually encoded.
+ *
+ * A picked `photo.jpg` re-encoded to WebP is `image/webp` bytes. Uploading it as
+ * `photo.jpg` makes the filename disagree with the content type, and since the
+ * storage key is generated FROM the filename, the object ends up named `.jpg`
+ * while holding WebP. Everything works — the server reads the content type —
+ * right up until something trusts the extension: a CDN sniffing by suffix, a
+ * bulk export, an operator downloading the file.
+ *
+ * Keep the user's original name separately for display; this is only the stored
+ * one. Returns the name unchanged when the format is unknown, because inventing
+ * an extension would be worse than keeping the one the user chose.
+ */
+export function storedFilename(originalName: string, format: string): string {
+  const ext = FORMAT_EXT[format.toLowerCase()];
+  if (!ext) return originalName;
+  const stem = originalName.replace(/\.[^./\\]+$/, '') || originalName;
+  return `${stem}.${ext}`;
+}
+
 /** Convert a compress result into media-kit display hints (thumbhash → base64). */
 export function toUploadHints(result: CompressImageResult): UploadHints {
   return {

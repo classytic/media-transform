@@ -21,11 +21,19 @@
  * ```
  */
 import type { CompressImageOptions, CompressImageResult, MediaTransform } from '../types.js';
-import { compressImage } from './compressImage.js';
+import { compressImageSet, type CompressImageSetOptions, type CompressImageSetResult } from './compressImageSet.js';
 import type { ImageIOAdapter } from './ImageIOAdapter.js';
 
-/** Options that survive structured clone (AbortSignal cannot cross threads). */
-export type WorkerCompressOptions = Omit<CompressImageOptions, 'signal'>;
+/**
+ * Options that survive structured clone (AbortSignal cannot cross threads).
+ *
+ * The SET options, not the single-image ones: the worker always runs
+ * `compressImageSet` and returns derivatives (possibly empty), so
+ * `compressImage` is the degenerate case of one protocol rather than a second
+ * message type. Two message kinds would mean two code paths that can drift, and
+ * the worker is where a drift is least visible.
+ */
+export type WorkerCompressOptions = Omit<CompressImageSetOptions, 'signal'>;
 
 export interface CompressWorkerRequest {
   readonly __mt: 'compress';
@@ -35,7 +43,12 @@ export interface CompressWorkerRequest {
 }
 
 export type CompressWorkerResponse =
-  | { readonly __mt: 'compress:result'; readonly id: number; readonly ok: true; readonly result: CompressImageResult }
+  | {
+      readonly __mt: 'compress:result';
+      readonly id: number;
+      readonly ok: true;
+      readonly result: CompressImageSetResult;
+    }
   | {
       readonly __mt: 'compress:result';
       readonly id: number;
@@ -61,7 +74,7 @@ export async function handleCompressRequest(
   request: CompressWorkerRequest,
 ): Promise<CompressWorkerResponse> {
   try {
-    const result = await compressImage(adapter, request.source, request.options);
+    const result = await compressImageSet(adapter, request.source, request.options);
     return { __mt: 'compress:result', id: request.id, ok: true, result };
   } catch (err) {
     const e = err instanceof Error ? err : new Error(String(err));
@@ -72,12 +85,21 @@ export async function handleCompressRequest(
 /** The tiny slice of the Worker interface the client wrapper needs (fake-able in tests). */
 export interface WorkerLike {
   postMessage(message: unknown): void;
-  addEventListener(type: 'message', listener: (event: { data: unknown }) => void): void;
-  removeEventListener(type: 'message', listener: (event: { data: unknown }) => void): void;
+  /**
+   * `error` and `messageerror` are part of the contract, not extras.
+   *
+   * Only `message` was listened for, so a worker that failed to LOAD (a bad
+   * bundle URL, a CSP refusal) or a response that failed to deserialise emitted
+   * an event nobody heard — and every pending promise stayed pending forever.
+   * The upload row just span. No rejection, no timeout, no error: the one
+   * outcome with no observable difference from "still working".
+   */
+  addEventListener(type: 'message' | 'error' | 'messageerror', listener: (event: unknown) => void): void;
+  removeEventListener(type: 'message' | 'error' | 'messageerror', listener: (event: unknown) => void): void;
 }
 
 interface Pending {
-  resolve(result: CompressImageResult): void;
+  resolve(result: CompressImageSetResult): void;
   reject(err: Error): void;
 }
 
@@ -96,7 +118,26 @@ export function createWorkerMediaTransform(worker: WorkerLike): MediaTransform &
   const pending = new Map<number, Pending>();
   let nextId = 1;
 
-  const onMessage = (event: { data: unknown }): void => {
+  /**
+   * Reject everything in flight. A worker-level failure is not per-request: the
+   * worker is gone, so nothing outstanding can ever be answered.
+   */
+  const failAll = (reason: string): void => {
+    for (const [, entry] of pending) entry.reject(new Error(`[media-transform] ${reason}`));
+    pending.clear();
+  };
+
+  const onError = (event: unknown): void => {
+    const detail = (event as { message?: string } | null)?.message;
+    failAll(`worker error${detail ? `: ${detail}` : ''}`);
+  };
+  const onMessageError = (): void => {
+    // The worker answered but the payload could not be structured-cloned back.
+    failAll('worker sent a message that could not be deserialised');
+  };
+
+  const onMessage = (rawEvent: unknown): void => {
+    const event = rawEvent as { data: unknown };
     if (!isCompressWorkerResponse(event.data)) return;
     const entry = pending.get(event.data.id);
     if (!entry) return; // aborted locally — drop the stale result
@@ -110,34 +151,45 @@ export function createWorkerMediaTransform(worker: WorkerLike): MediaTransform &
     }
   };
   worker.addEventListener('message', onMessage);
+  worker.addEventListener('error', onError);
+  worker.addEventListener('messageerror', onMessageError);
+
+  /** One request/response round trip; the caller decides what to keep. */
+  const run = (source: Blob, options?: CompressImageSetOptions): Promise<CompressImageSetResult> => {
+    const { signal, ...rest } = options ?? {};
+    if (signal?.aborted) {
+      return Promise.reject(new DOMException('Image compression aborted', 'AbortError'));
+    }
+    const id = nextId++;
+    return new Promise<CompressImageSetResult>((resolve, reject) => {
+      const entry: Pending = { resolve, reject };
+      pending.set(id, entry);
+      signal?.addEventListener(
+        'abort',
+        () => {
+          if (pending.delete(id)) reject(new DOMException('Image compression aborted', 'AbortError'));
+        },
+        { once: true },
+      );
+      const request: CompressWorkerRequest = { __mt: 'compress', id, source, options: rest };
+      worker.postMessage(request);
+    });
+  };
 
   return {
-    compressImage(source: Blob, options?: CompressImageOptions): Promise<CompressImageResult> {
-      const { signal, ...rest } = options ?? {};
-      if (signal?.aborted) {
-        return Promise.reject(new DOMException('Image compression aborted', 'AbortError'));
-      }
-      const id = nextId++;
-      return new Promise<CompressImageResult>((resolve, reject) => {
-        const entry: Pending = { resolve, reject };
-        pending.set(id, entry);
-        signal?.addEventListener(
-          'abort',
-          () => {
-            if (pending.delete(id)) reject(new DOMException('Image compression aborted', 'AbortError'));
-          },
-          { once: true },
-        );
-        const request: CompressWorkerRequest = { __mt: 'compress', id, source, options: rest };
-        worker.postMessage(request);
-      });
+    compressImageSet: run,
+    /**
+     * The single-output view of the same call. Derivatives are simply not
+     * requested, so nothing extra is encoded — this is not a wasteful wrapper.
+     */
+    async compressImage(source: Blob, options?: CompressImageOptions): Promise<CompressImageResult> {
+      return run(source, options as CompressImageSetOptions);
     },
     dispose(): void {
       worker.removeEventListener('message', onMessage);
-      for (const [, entry] of pending) {
-        entry.reject(new Error('[media-transform] worker transform disposed'));
-      }
-      pending.clear();
+      worker.removeEventListener('error', onError);
+      worker.removeEventListener('messageerror', onMessageError);
+      failAll('worker transform disposed');
     },
   };
 }

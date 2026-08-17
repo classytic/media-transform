@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { averageColorHex } from '../../src/algorithms/color';
-import { toUploadHints } from '../../src/image/uploadHints';
+import { toUploadHints, storedFilename } from '../../src/image/uploadHints';
 import type { CompressImageResult } from '../../src/types';
 
 const base = (): CompressImageResult => ({
@@ -54,5 +54,32 @@ describe('toUploadHints', () => {
     const hints = toUploadHints({ ...base(), dominantColor: '#a1b2c3' });
     expect(hints.dominantColor).toBe('#a1b2c3');
     expect(hints.dominantColor).toMatch(/^#[0-9a-fA-F]{6}$/); // media-kit's zod regex
+  });
+});
+
+describe('storedFilename', () => {
+  /**
+   * A picked `photo.jpg` re-encoded to WebP is WebP bytes. Stored as `.jpg` the
+   * name disagrees with the content — and the storage key is generated FROM the
+   * filename, so the object is named `.jpg` while holding WebP. Nothing breaks
+   * until something trusts the suffix: a CDN, an export, an operator.
+   */
+  it('rewrites the extension to the ENCODED format', () => {
+    expect(storedFilename('photo.jpg', 'webp')).toBe('photo.webp');
+    expect(storedFilename('shot.HEIC', 'avif')).toBe('shot.avif');
+    expect(storedFilename('a.png', 'jpeg')).toBe('a.jpg');
+  });
+
+  it('keeps the stem intact, including dots inside it', () => {
+    expect(storedFilename('my.photo.v2.jpg', 'webp')).toBe('my.photo.v2.webp');
+  });
+
+  it('handles a name with no extension', () => {
+    expect(storedFilename('photo', 'webp')).toBe('photo.webp');
+  });
+
+  /** Inventing an extension would be worse than keeping the user's. */
+  it('returns the name UNCHANGED for an unknown format', () => {
+    expect(storedFilename('photo.jpg', 'jxl')).toBe('photo.jpg');
   });
 });

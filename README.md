@@ -1,5 +1,7 @@
 # @classytic/media-transform
 
+[![Sponsor](https://img.shields.io/github/sponsors/classytic?style=flat-square&label=Sponsor&logo=GitHub&color=EA4AAA)](https://github.com/sponsors/classytic)
+
 Client-side media processing — compress, resize, and re-encode images in the browser **before**
 upload (WhatsApp/Facebook style), so a Node backend can skip `sharp` on the hot path.
 
@@ -211,3 +213,7 @@ src/                             tests/                (mirrors src)
 ## License
 
 MIT
+
+## Trademark
+
+The code is MIT-licensed. "Classytic"/"arc" names + logos are trademarks of Classytic LLC — see [TRADEMARK.md](TRADEMARK.md).

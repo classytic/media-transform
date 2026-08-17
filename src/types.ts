@@ -97,4 +97,16 @@ export interface CompressImageResult {
 /** The portable capability contract — implemented per runtime. */
 export interface MediaTransform {
   compressImage(source: ImageSource, options?: CompressImageOptions): Promise<CompressImageResult>;
+  /**
+   * Primary + named derivatives from ONE decode.
+   *
+   * Part of the core contract rather than a worker-only extra: a caller that
+   * has a `MediaTransform` must be able to ask for a set regardless of which
+   * adapter it got, otherwise "does this runtime support derivatives?" becomes
+   * a question with no answer at the type level and a silent no at runtime.
+   */
+  compressImageSet(
+    source: ImageSource,
+    options?: import('./image/compressImageSet.js').CompressImageSetOptions,
+  ): Promise<import('./image/compressImageSet.js').CompressImageSetResult>;
 }

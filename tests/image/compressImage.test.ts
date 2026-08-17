@@ -189,3 +189,54 @@ describe('compressImage — dominantColor', () => {
     expect(res.dominantColor).toBeUndefined();
   });
 });
+
+/**
+ * Passthrough must not claim a format it cannot label, nor a sanitisation it
+ * cannot perform.
+ *
+ * `mimeToFormat` fell back to `'jpeg'` for anything unmapped, so a passed-through
+ * HEIC reported `format: 'jpeg'` — and a caller naming the stored file from that
+ * wrote HEIC bytes to `.jpg`. Meanwhile the sanitizer returns HEIC/TIFF/BMP
+ * UNCHANGED, so `stripMetadata: true` was accepted and silently did nothing:
+ * the fast path became the one that leaks the user's location.
+ */
+describe('compressImage — passthrough eligibility', () => {
+  const heic = (bytes: number) => new Blob([new Uint8Array(bytes)], { type: 'image/heic' });
+
+  it('does NOT pass through a format it cannot sanitize — it re-encodes instead', async () => {
+    const { adapter, calls } = makeFakeAdapter({ width: 300, height: 200, outBytes: 500 });
+    const res = await compressImage(adapter, heic(1000), {
+      maxEdge: 4000, // within size, so only eligibility can stop passthrough
+      passthroughUnder: 100_000,
+      stripMetadata: true,
+    });
+
+    expect(res.passedThrough).toBe(false);
+    expect(calls.resizeAndEncode).toHaveLength(1);
+    // And the reported format is one the encoder actually produced.
+    expect(['jpeg', 'webp']).toContain(res.format);
+  });
+
+  it('still passes through a JPEG, which it CAN both label and sanitize', async () => {
+    const { adapter } = makeFakeAdapter({ width: 300, height: 200 });
+    const res = await compressImage(adapter, srcBlob(1000, 'image/jpeg'), {
+      maxEdge: 4000,
+      passthroughUnder: 100_000,
+      stripMetadata: true,
+    });
+
+    expect(res.passedThrough).toBe(true);
+    expect(res.format).toBe('jpeg');
+  });
+
+  it('passes an exotic format through only when sanitisation was NOT requested', async () => {
+    const { adapter } = makeFakeAdapter({ width: 300, height: 200 });
+    const res = await compressImage(adapter, heic(1000), {
+      maxEdge: 4000,
+      passthroughUnder: 100_000,
+      stripMetadata: false,
+    });
+    // Still refused: the format cannot be labelled truthfully either.
+    expect(res.passedThrough).toBe(false);
+  });
+});

@@ -28,8 +28,11 @@ export default defineConfig({
     'image/llmPayload': 'src/image/llmPayload.ts',
     'image/uploadHints': 'src/image/uploadHints.ts',
     'image/compressImage': 'src/image/compressImage.ts',
+    'image/compressImageSet': 'src/image/compressImageSet.ts',
+    policy: 'src/policy.ts',
     'image/ImageIOAdapter': 'src/image/ImageIOAdapter.ts',
     'image/BrowserImageAdapter': 'src/image/BrowserImageAdapter.ts',
+    'image/createWorker': 'src/image/createWorker.ts',
     'image/workerProtocol': 'src/image/workerProtocol.ts',
     'image/worker': 'src/image/worker.ts',
     'react/useImageCompress': 'src/react/useImageCompress.ts',
@@ -41,5 +44,11 @@ export default defineConfig({
   sourcemap: false,
   clean: true,
   treeshake: true,
-  deps: { skipNodeModulesBundle: true },
+  deps: {
+    skipNodeModulesBundle: true,
+    // Explicit scope patterns so the rule does not depend on `skipNodeModulesBundle` to be
+    // correct. No `@classytic/*` dep today — the gate is here so the FIRST one added is
+    // externalized by default rather than silently inlined into a browser bundle.
+    neverBundle: [/^@classytic\//, /^@spinekit\//],
+  },
 });

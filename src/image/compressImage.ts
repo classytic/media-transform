@@ -7,10 +7,10 @@
  */
 import { averageColorHex } from '../algorithms/color.js';
 import { resolveFormat } from '../algorithms/format.js';
-import { stripImageMetadata } from '../algorithms/sanitize.js';
+import { canStripImageMetadata, stripImageMetadata } from '../algorithms/sanitize.js';
 import { computeTargetSize, planDownscaleSteps } from '../algorithms/sizing.js';
 import type { CompressImageOptions, CompressImageResult, ImageFormat } from '../types.js';
-import type { ImageIOAdapter } from './ImageIOAdapter.js';
+import type { DecodedImage, ImageIOAdapter } from './ImageIOAdapter.js';
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) throw new DOMException('Image compression aborted', 'AbortError');
@@ -28,12 +28,36 @@ export async function compressImage(
   source: Blob,
   options: CompressImageOptions = {},
 ): Promise<CompressImageResult> {
-  const { quality = 0.82, passthroughUnder = 0, stripMetadata = true, signal } = options;
-  throwIfAborted(signal);
-
+  throwIfAborted(options.signal);
   const image = await adapter.decode(source);
   try {
-    throwIfAborted(signal);
+    return await compressDecoded(adapter, image, source, options);
+  } finally {
+    image.close();
+  }
+}
+
+/**
+ * The compression core, over an ALREADY-DECODED image.
+ *
+ * Split out of {@link compressImage} so a caller that needs several outputs
+ * from one source decodes exactly once — see `compressImageSet`. Decoding is
+ * the expensive step (a 12MP JPEG is ~48MB of RGBA); re-decoding per output
+ * is what makes a naive "call compressImage three times" three times the work
+ * and three times the peak memory.
+ *
+ * Does NOT close `image` — ownership stays with the caller, which is what lets
+ * the set orchestrator reuse it across derivatives.
+ */
+export async function compressDecoded(
+  adapter: ImageIOAdapter,
+  image: DecodedImage,
+  source: Blob,
+  options: CompressImageOptions = {},
+): Promise<CompressImageResult> {
+  const { quality = 0.82, passthroughUnder = 0, stripMetadata = true, signal } = options;
+  throwIfAborted(signal);
+  {
     const sourceDims = { width: image.width, height: image.height };
     const target = computeTargetSize(sourceDims, options);
     const withinSize = target.width === image.width && target.height === image.height;
@@ -43,7 +67,27 @@ export async function compressImage(
     // re-compress the thumbnail" fast path. The bytes are still losslessly
     // metadata-stripped by default: a re-encode drops EXIF/GPS implicitly, so
     // the fast path must not become the one that leaks the user's location.
-    if (withinSize && passthroughUnder > 0 && source.size <= passthroughUnder) {
+    /**
+     * Passthrough is only offered for formats this build can BOTH label and
+     * sanitize — in practice JPEG/PNG/WebP.
+     *
+     * Two silent defects lived here. `mimeToFormat` fell back to `'jpeg'` for
+     * anything unmapped, so a passed-through HEIC reported `format: 'jpeg'` and
+     * a caller naming the stored file from that format wrote HEIC bytes to
+     * `.jpg`. And the sanitizer returns HEIC/TIFF/BMP UNCHANGED, so
+     * `stripMetadata: true` was accepted and did nothing — the fast path became
+     * the one that leaks the user's location, which is precisely what its own
+     * comment says it must never be.
+     *
+     * Anything else falls through to the normal re-encode, which produces a
+     * truthful format and drops metadata implicitly. Slower for an exotic
+     * format, correct for all of them.
+     */
+    const passthroughEligible =
+      MIME_TO_FORMAT[source.type.toLowerCase().split(';')[0]?.trim() ?? ''] !== undefined &&
+      (!stripMetadata || canStripImageMetadata(source.type));
+
+    if (passthroughEligible && withinSize && passthroughUnder > 0 && source.size <= passthroughUnder) {
       let blob = source;
       if (stripMetadata) {
         const bytes = new Uint8Array(await source.arrayBuffer());
@@ -82,12 +126,10 @@ export async function compressImage(
       passedThrough: false,
       ...extras,
     };
-  } finally {
-    image.close();
   }
 }
 
-function clampQuality(q: number): number {
+export function clampQuality(q: number): number {
   if (Number.isNaN(q)) return 0.82;
   return Math.min(1, Math.max(0, q));
 }
@@ -96,7 +138,7 @@ function clampQuality(q: number): number {
  * ThumbHash (best-effort — optional peer) + dominantColor, computed from ONE
  * small RGBA extraction shared by both. Silently absent when unavailable.
  */
-async function computeExtras(
+export async function computeExtras(
   adapter: ImageIOAdapter,
   image: Parameters<ImageIOAdapter['extractRgba']>[0],
   options: CompressImageOptions,

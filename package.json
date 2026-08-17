@@ -1,7 +1,7 @@
 {
   "name": "@classytic/media-transform",
-  "version": "0.1.0",
-  "description": "Client-side media processing — compress, resize, and re-encode images/video in the browser before upload (WhatsApp/Facebook-style), so a Node backend can skip sharp on the hot path. Runtime-agnostic pure core + a browser adapter; a React Native adapter satisfies the same contract.",
+  "version": "0.2.0",
+  "description": "Client-side media processing \u2014 compress, resize, and re-encode images/video in the browser before upload (WhatsApp/Facebook-style), so a Node backend can skip sharp on the hot path. Runtime-agnostic pure core + a browser adapter; a React Native adapter satisfies the same contract.",
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.js",
@@ -52,6 +52,14 @@
       "types": "./dist/image/compressImage.d.ts",
       "default": "./dist/image/compressImage.js"
     },
+    "./image/compressImageSet": {
+      "types": "./dist/image/compressImageSet.d.ts",
+      "default": "./dist/image/compressImageSet.js"
+    },
+    "./policy": {
+      "types": "./dist/policy.d.ts",
+      "default": "./dist/policy.js"
+    },
     "./image/ImageIOAdapter": {
       "types": "./dist/image/ImageIOAdapter.d.ts",
       "default": "./dist/image/ImageIOAdapter.js"
@@ -63,6 +71,10 @@
     "./image/llmPayload": {
       "types": "./dist/image/llmPayload.d.ts",
       "default": "./dist/image/llmPayload.js"
+    },
+    "./image/createWorker": {
+      "types": "./dist/image/createWorker.d.ts",
+      "default": "./dist/image/createWorker.js"
     },
     "./image/workerProtocol": {
       "types": "./dist/image/workerProtocol.d.ts",
@@ -124,11 +136,15 @@
     "thumbhash": ">=0.1.1"
   },
   "peerDependenciesMeta": {
-    "react": { "optional": true },
-    "thumbhash": { "optional": true }
+    "react": {
+      "optional": true
+    },
+    "thumbhash": {
+      "optional": true
+    }
   },
   "scripts": {
-    "build": "tsdown && tsc --emitDeclarationOnly --outDir dist",
+    "build": "tsdown && tsdown --config tsdown.worker.config.ts && tsc --emitDeclarationOnly --outDir dist",
     "dev": "tsdown --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
@@ -152,7 +168,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "thumbhash": "^0.1.1",
-    "tsdown": "^0.21.8",
+    "tsdown": "^0.22.14",
     "typescript": "^6.0.3",
     "vitest": "^4.1.4"
   }
