@@ -40,4 +40,13 @@ export interface ImageIOAdapter {
 
   /** Extract RGBA at a small size for ThumbHash. `null` if unavailable. */
   extractRgba(image: DecodedImage, max: number): Promise<{ data: Uint8Array; width: number; height: number } | null>;
+
+  /**
+   * OPTIONAL: turn raw bytes into this runtime's Blob. Used only where the
+   * orchestrator produces bytes itself (the metadata-stripped passthrough).
+   * Absent ⇒ `new Blob([bytes])`, which is right everywhere except React
+   * Native, whose Blob cannot be built from an ArrayBuffer/Uint8Array: the
+   * native adapter writes the bytes to a cache file and returns that file.
+   */
+  fromBytes?(bytes: Uint8Array, mimeType: string): Promise<Blob>;
 }

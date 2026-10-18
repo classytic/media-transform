@@ -26,6 +26,7 @@
  */
 
 import { computeTargetSize, planDownscaleSteps } from '../algorithms/sizing.js';
+import { createAbortError, isAbortError } from '../algorithms/abort.js';
 import { resolveFormat } from '../algorithms/format.js';
 import type { CompressImageOptions, CompressImageResult, ImageFormat } from '../types.js';
 import { clampQuality, compressDecoded } from './compressImage.js';
@@ -84,7 +85,7 @@ export interface CompressImageSetResult extends CompressImageResult {
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) throw new DOMException('Image compression aborted', 'AbortError');
+  if (signal?.aborted) throw createAbortError();
 }
 
 /**
@@ -166,7 +167,7 @@ export async function compressImageSet(
         // An AbortError is the CALLER cancelling, not this derivative failing —
         // swallowing it here would keep grinding through the remaining sizes
         // after the user navigated away.
-        if (err instanceof DOMException && err.name === 'AbortError') throw err;
+        if (isAbortError(err)) throw err;
         skipped.push({
           name: spec.name,
           reason: 'encode-failed',

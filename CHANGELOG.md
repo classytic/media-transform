@@ -3,6 +3,46 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-10-18
+
+React Native / Expo adapter. The web path is unchanged.
+
+### Added
+
+- **`./native/ExpoImageAdapter`**: `createExpoMediaTransform()` (synchronous; Expo modules load on
+  first use, a failed load is retried) and `createExpoImageAdapter()`, implementing the same
+  `ImageIOAdapter` / `MediaTransform` contract over Expo SDK 55 modules. The core orchestrator,
+  presets, policy, passthrough, metadata stripping and format fallback run unchanged.
+  - decode / resize / encode with `expo-image-manipulator`'s contextual API
+    (`ImageManipulator.manipulate(uri).resize().renderAsync()`, `ImageRef.saveAsync({ format, compress })`);
+    the deprecated `manipulateAsync` is not used. The core's halving plan becomes chained `resize()` calls.
+  - files via `expo-file-system`'s `File` / `Paths` (results carry `uri`; `blob` is the `File`).
+  - `sha256(source)` for the dedup handshake: `expo-crypto` `digest`, else WebCrypto, else a clear error.
+  - `bytes(source)`: the bytes to PUT (React Native's global `fetch` cannot send a `File` body).
+  - `describe(source, folder?)` returns `TransformFacts` for `resolveTransformPlan`.
+  - `discard(result)` deletes only cache files the adapter produced, never the caller's source.
+  - Encodable formats: JPEG, PNG, and WebP when `SaveFormat.WEBP` exists (canvas-probed on Expo web).
+    AVIF is never claimed. `detectExpoEncodable()` exported; `encodable` override option.
+  - EXIF/GPS: verified in the 55.0.x native sources that re-encoded output carries no source EXIF
+    (iOS `UIImage` encoders; Android `Bitmap.compress`) and is display-oriented; passed-through
+    files are stripped by the core sanitizer and written to a new cache file.
+- **`./algorithms/png`**: `decodePngToRgba` / `zlibInflate`, a pure PNG decoder with its own inflate
+  (Hermes has no zlib or `DecompressionStream`). Feeds ThumbHash / `dominantColor` on native, where
+  pixels cannot be read back from a canvas.
+- **`ImageIOAdapter.fromBytes?`** (optional): lets an adapter materialise orchestrator-produced bytes
+  (the stripped passthrough). React Native's Blob cannot be built from bytes; absent, the core keeps
+  `new Blob([bytes])`.
+- Optional peers: `expo-image-manipulator` (>=13), `expo-file-system` (>=19), `expo-crypto` (>=14).
+  Each import sits in its own `try`, so Expo's Metro (`allowOptionalDependencies`) bundles without them.
+
+### Fixed
+
+- Abort errors and abort detection no longer require a `DOMException` global (React Native has none):
+  `createAbortError()` / `isAbortError()` in `compressImage` and `compressImageSet`. Before, on React
+  Native a single failed derivative threw a `ReferenceError` from the `catch` instead of landing in
+  `skipped`, and an abort threw a `ReferenceError` instead of an `AbortError`. Browser behaviour is
+  identical (still a `DOMException`).
+
 ## [0.1.0] — 2026-07-07
 
 Initial release — browser image compression.

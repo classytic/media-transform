@@ -88,6 +88,8 @@ entry (the factory + capability gates + types), not a re-export of everything.
 | `./react/useImageUpload` | `useImageUpload({ transform?, upload })` — the WhatsApp upload-on-pick flow | browser + React |
 | `./capabilities` | `isBrowserImageSupported`, `isWebCodecsVideoSupported` | browser |
 | `./types` | The full `MediaTransform` contract (type-only) | anywhere |
+| `./native/ExpoImageAdapter` | `createExpoMediaTransform()`, `createExpoImageAdapter()`, `detectExpoEncodable()` | React Native / Expo |
+| `./algorithms/png` | `decodePngToRgba`, `zlibInflate`: pure PNG decoder (the native placeholder path) | **anywhere** (pure) |
 
 ### Off-main-thread (worker)
 
@@ -185,6 +187,86 @@ function Uploader({ transform }) {
 }
 ```
 
+## React Native / Expo
+
+The same `MediaTransform` contract over Expo's native modules. The core orchestrator, presets,
+policy, passthrough rule, metadata stripping and format fallback are the web code, unchanged; only
+the four adapter verbs (decode, resize + encode, RGBA for placeholders, bytes to file) are native.
+
+```bash
+npx expo install expo-image-manipulator expo-file-system expo-crypto
+npm install thumbhash   # optional: ThumbHash placeholders
+```
+
+All four are **optional peers** of this package, required only by the `./native/ExpoImageAdapter`
+subpath. `expo-crypto` is optional even there: without it the hash uses WebCrypto when the runtime
+has it, and throws an install hint when it does not (Hermes has no `crypto.subtle`).
+
+```ts
+import { PRESETS } from '@classytic/media-transform/algorithms/presets';
+import { toUploadHints, storedFilename } from '@classytic/media-transform/image/uploadHints';
+import { FORMAT_MIME } from '@classytic/media-transform/algorithms/format';
+import { createExpoMediaTransform } from '@classytic/media-transform/native/ExpoImageAdapter';
+
+const mt = createExpoMediaTransform(); // synchronous; modules load on first use
+
+async function onPhotoPicked(asset: { uri: string; fileName?: string | null }) {
+  const out = await mt.compressImage(asset.uri, PRESETS.chat); // 1600px, q0.82, webp → jpeg, thumbhash
+  const hints = toUploadHints(out);       // { width, height, thumbhash? }: render the thumbhash now
+  const sha256 = await mt.sha256(out.uri); // hash the OUTPUT: it is what gets stored
+  await upload({
+    body: await mt.bytes(out.uri),        // RN's global fetch needs bytes; `expo/fetch` also takes out.blob
+    filename: storedFilename(asset.fileName ?? 'photo.jpg', out.format),
+    contentType: FORMAT_MIME[out.format],
+    size: out.bytes,
+    sha256,
+    hints,
+  });
+  mt.discard(out); // delete the cache files this produced (never the picked source)
+}
+```
+
+- **Sources:** a `file://` / `content://` / `ph://` URI string, anything with a `uri` (an
+  `expo-image-picker` asset, an `expo-file-system` `File`), or a Blob. Prefer a URI: React Native's
+  Blob cannot hand its bytes to JS, so a bare Blob is staged through `arrayBuffer()` where available.
+- **Results** carry `uri` (and each derivative does too). `blob` IS the `expo-file-system` `File`.
+  React Native's global `fetch` only sends its own Blobs, strings and byte arrays, so PUT
+  `await mt.bytes(out.uri)` there, or use `fetch` from `expo/fetch`, which accepts the `File` directly.
+- **Policy:** `await mt.describe(uri, folder)` returns the `TransformFacts` for
+  `resolveTransformPlan(facts, policy)`; run `mt.compressImageSet(uri, plan.options)` when
+  `plan.transform`.
+- **Formats:** JPEG and PNG always, WebP when `SaveFormat.WEBP` exists (iOS via
+  SDWebImageWebPCoder, Android natively). AVIF is never claimed, so `['avif','webp','jpeg']`
+  resolves to WebP. On Expo **web** the canvas is probed (Safari cannot encode WebP), but prefer
+  `createBrowserMediaTransform()` there.
+- **API:** the contextual `ImageManipulator.manipulate(uri).resize().renderAsync()` +
+  `ImageRef.saveAsync({ format, compress })` API (SDK 52+), never the deprecated
+  `manipulateAsync`; `expo-file-system`'s object API (`File`, `Paths`, SDK 54+), never `/legacy`.
+  The core's halving plan is honoured with chained `resize()` calls (Android's resize is a bilinear
+  `createScaledBitmap`, which aliases on a one-shot >2x downscale).
+
+### Privacy on native: EXIF and GPS
+
+Verified against the expo-image-manipulator 55.0.x native sources:
+
+- **iOS** loads with `UIImage(data:)`, applies orientation (`ImageFixOrientationTransformer`) as
+  the first step, and saves with `UIImage.jpegData` / `pngData` / SDWebImage's WebP coder. The
+  source's EXIF dictionary, GPS included, is not written to the output.
+- **Android** decodes through Glide (which applies EXIF orientation) and saves with
+  `Bitmap.compress`, which writes no EXIF at all.
+
+So every RE-ENCODED output is location-free, with display-oriented dimensions. The passthrough fast
+path (a file already under `passthroughUnder`) does not re-encode: it is stripped losslessly by the
+same byte-level sanitizer as on the web and written to a new cache file, so it is location-free
+too. A HEIC source is never passed through (it cannot be sanitized here); it is re-encoded.
+
+### Placeholders without a canvas
+
+ThumbHash and `dominantColor` need RGBA pixels, and React Native cannot read pixels back. The adapter
+saves a ≤100px PNG through the manipulator and decodes it with the bundled pure decoder
+(`./algorithms/png`: its own inflate, since Hermes has no zlib or `DecompressionStream`), then
+deletes the temp file. Any failure there yields no placeholder and never fails the upload.
+
 ## Source layout
 
 Feature-first domain directories (PixiJS-style organization), one concept per file, no barrel
@@ -208,7 +290,8 @@ src/                             tests/                (mirrors src)
 - **Video** — client transcode via WebCodecs `VideoEncoder` + `mp4-muxer` (aligned with
   `react-media`'s existing `webcodecs-segmenter` and `vixel-ui`'s export core), best-effort with a
   server-transcode fallback for unsupported browsers.
-- **Native adapter** — the same `MediaTransform` over React Native native modules.
+- **Native adapter**: shipped in 0.3.0 for Expo (see "React Native / Expo"). Bare React Native
+  (no Expo modules) would be another adapter over the same `ImageIOAdapter` seam.
 
 ## License
 

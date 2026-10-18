@@ -37,6 +37,8 @@ export default defineConfig({
     'image/worker': 'src/image/worker.ts',
     'react/useImageCompress': 'src/react/useImageCompress.ts',
     'react/useImageUpload': 'src/react/useImageUpload.ts',
+    'native/ExpoImageAdapter': 'src/native/ExpoImageAdapter.ts',
+    'algorithms/png': 'src/algorithms/png.ts',
   },
   format: 'esm',
   platform: 'browser',

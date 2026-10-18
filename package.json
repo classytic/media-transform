@@ -1,7 +1,7 @@
 {
   "name": "@classytic/media-transform",
-  "version": "0.2.0",
-  "description": "Client-side media processing \u2014 compress, resize, and re-encode images/video in the browser before upload (WhatsApp/Facebook-style), so a Node backend can skip sharp on the hot path. Runtime-agnostic pure core + a browser adapter; a React Native adapter satisfies the same contract.",
+  "version": "0.3.0",
+  "description": "Client-side media processing — compress, resize, and re-encode images/video in the browser before upload (WhatsApp/Facebook-style), so a Node backend can skip sharp on the hot path. Runtime-agnostic pure core + a browser adapter; a React Native adapter satisfies the same contract.",
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.js",
@@ -92,6 +92,14 @@
       "types": "./dist/react/useImageUpload.d.ts",
       "default": "./dist/react/useImageUpload.js"
     },
+    "./native/ExpoImageAdapter": {
+      "types": "./dist/native/ExpoImageAdapter.d.ts",
+      "default": "./dist/native/ExpoImageAdapter.js"
+    },
+    "./algorithms/png": {
+      "types": "./dist/algorithms/png.d.ts",
+      "default": "./dist/algorithms/png.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -113,6 +121,7 @@
     "thumbhash",
     "presigned-upload",
     "react-native",
+    "expo",
     "typescript"
   ],
   "author": "Classytic <classytic.dev@gmail.com> (https://github.com/classytic)",
@@ -133,13 +142,25 @@
   },
   "peerDependencies": {
     "react": ">=18",
-    "thumbhash": ">=0.1.1"
+    "thumbhash": ">=0.1.1",
+    "expo-image-manipulator": ">=13.0.0",
+    "expo-file-system": ">=19.0.0",
+    "expo-crypto": ">=14.0.0"
   },
   "peerDependenciesMeta": {
     "react": {
       "optional": true
     },
     "thumbhash": {
+      "optional": true
+    },
+    "expo-image-manipulator": {
+      "optional": true
+    },
+    "expo-file-system": {
+      "optional": true
+    },
+    "expo-crypto": {
       "optional": true
     }
   },
@@ -158,18 +179,19 @@
     "prepublishOnly": "npm run check && npm run typecheck && npm run test && npm run build"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.10",
-    "@testing-library/react": "^16.1.0",
-    "@types/node": "^22.0.0",
-    "@types/react": "^19.0.0",
-    "@vitejs/plugin-react": "^4.3.4",
-    "@vitest/coverage-v8": "^4.1.4",
-    "happy-dom": "^15.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "@biomejs/biome": "^2.5.15",
+    "@classytic/dev-tools": "^0.2.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "@vitest/coverage-v8": "^5.0.5",
+    "happy-dom": "^21.0.3",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "thumbhash": "^0.1.1",
-    "tsdown": "^0.22.14",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.4"
+    "tsdown": "^0.23.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
   }
 }

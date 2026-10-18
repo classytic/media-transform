@@ -5,6 +5,7 @@
  * exercised in Node with a fake adapter and reused unchanged by the browser
  * adapter. The heavy ThumbHash peer is `await import()`-ed only when asked.
  */
+import { createAbortError } from '../algorithms/abort.js';
 import { averageColorHex } from '../algorithms/color.js';
 import { resolveFormat } from '../algorithms/format.js';
 import { canStripImageMetadata, stripImageMetadata } from '../algorithms/sanitize.js';
@@ -13,7 +14,7 @@ import type { CompressImageOptions, CompressImageResult, ImageFormat } from '../
 import type { DecodedImage, ImageIOAdapter } from './ImageIOAdapter.js';
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) throw new DOMException('Image compression aborted', 'AbortError');
+  if (signal?.aborted) throw createAbortError();
 }
 
 /**
@@ -93,7 +94,8 @@ export async function compressDecoded(
         const bytes = new Uint8Array(await source.arrayBuffer());
         throwIfAborted(signal);
         const cleaned = stripImageMetadata(bytes, source.type);
-        if (cleaned !== bytes) blob = new Blob([cleaned as BlobPart], { type: source.type });
+        if (cleaned !== bytes && adapter.fromBytes) blob = await adapter.fromBytes(cleaned, source.type);
+        else if (cleaned !== bytes) blob = new Blob([cleaned as BlobPart], { type: source.type });
       }
       const extras = await computeExtras(adapter, image, options, signal);
       return {
